@@ -314,10 +314,33 @@ function createProfileContext(
         }
       }
       if (current.resolved.attachOnly || remoteCdp) {
+        // Remote CDP providers (e.g., Browserbase) may not serve /json/version
+        // but are still reachable via direct Playwright connectOverCDP.
+        // Use a short-timeout, non-cached probe to avoid the multi-retry
+        // overhead of connectBrowser()'s cached path.
+        if (remoteCdp) {
+          const probeTimeout = resolveRemoteHttpTimeout(undefined) * 2;
+          try {
+            const { chromium } = await import("playwright-core");
+            const headers = getHeadersWithAuth(profile.cdpUrl);
+            const browser = await chromium.connectOverCDP(profile.cdpUrl, {
+              timeout: probeTimeout,
+              headers,
+            });
+            // Probe succeeded — close immediately; ensureTabAvailable() will
+            // reconnect via the cached connectBrowser() path.
+            await browser.close();
+            return;
+          } catch (err) {
+            const detail = err instanceof Error ? err.message : String(err);
+            throw new Error(
+              `Remote CDP for profile "${profile.name}" is not reachable at ${profile.cdpUrl}. ` +
+                `Direct CDP probe failed: ${detail}`,
+            );
+          }
+        }
         throw new Error(
-          remoteCdp
-            ? `Remote CDP for profile "${profile.name}" is not reachable at ${profile.cdpUrl}.`
-            : `Browser attachOnly is enabled and profile "${profile.name}" is not running.`,
+          `Browser attachOnly is enabled and profile "${profile.name}" is not running.`,
         );
       }
       const launched = await launchOpenClawChrome(current.resolved, profile);
