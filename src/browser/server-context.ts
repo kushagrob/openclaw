@@ -323,7 +323,10 @@ function createProfileContext(
           try {
             const { chromium } = await import("playwright-core");
             const headers = getHeadersWithAuth(profile.cdpUrl);
-            const browser = await chromium.connectOverCDP(profile.cdpUrl, {
+            // Convert https:// to wss:// so Playwright skips its HTTP
+            // /json/version probe (which returns 401 on Browserbase).
+            const wsUrl = profile.cdpUrl.replace(/^https?:\/\//, "wss://");
+            const browser = await chromium.connectOverCDP(wsUrl, {
               timeout: probeTimeout,
               headers,
             });
@@ -336,6 +339,7 @@ function createProfileContext(
             throw new Error(
               `Remote CDP for profile "${profile.name}" is not reachable at ${profile.cdpUrl}. ` +
                 `Direct CDP probe failed: ${detail}`,
+              { cause: err },
             );
           }
         }

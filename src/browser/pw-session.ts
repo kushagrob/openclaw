@@ -332,7 +332,10 @@ async function connectBrowser(cdpUrl: string): Promise<ConnectedBrowser> {
       try {
         const timeout = 5000 + attempt * 2000;
         const wsUrl = await getChromeWebSocketUrl(normalized, timeout).catch(() => null);
-        const endpoint = wsUrl ?? normalized;
+        // If getChromeWebSocketUrl failed (e.g., Browserbase doesn't serve
+        // /json/version), convert https:// to wss:// so Playwright skips
+        // its HTTP probe and connects directly via WebSocket.
+        const endpoint = wsUrl ?? normalized.replace(/^https?:\/\//, "wss://");
         const headers = getHeadersWithAuth(endpoint);
         const browser = await chromium.connectOverCDP(endpoint, { timeout, headers });
         const onDisconnected = () => {
