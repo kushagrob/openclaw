@@ -305,28 +305,51 @@ function createProfileContext(
         // overhead of connectBrowser()'s cached path.
         if (remoteCdp) {
           const probeTimeout = resolveRemoteHttpTimeout(undefined) * 2;
-          try {
+          const tryDirectProbe = async (url: string) => {
             const { chromium } = await import("playwright-core");
-            const headers = getHeadersWithAuth(profile.cdpUrl);
-            // Convert https:// to wss:// so Playwright skips its HTTP
-            // /json/version probe (which returns 401 on Browserbase).
-            const wsUrl = profile.cdpUrl.replace(/^https?:\/\//, "wss://");
+            const headers = getHeadersWithAuth(url);
+            const wsUrl = url.replace(/^https?:\/\//, "wss://");
             const browser = await chromium.connectOverCDP(wsUrl, {
               timeout: probeTimeout,
               headers,
             });
-            // Probe succeeded — close immediately; ensureTabAvailable() will
-            // reconnect via the cached connectBrowser() path.
             await browser.close();
+          };
+
+          // First attempt with current cdpUrl.
+          try {
+            await tryDirectProbe(profile.cdpUrl);
             return;
-          } catch (err) {
-            const detail = err instanceof Error ? err.message : String(err);
-            throw new Error(
-              `Remote CDP for profile "${profile.name}" is not reachable at ${profile.cdpUrl}. ` +
-                `Direct CDP probe failed: ${detail}`,
-              { cause: err },
-            );
+          } catch {
+            // cdpUrl may be stale (e.g., Den is creating a Browserbase session
+            // on-demand and will update cdpUrl via config.patch shortly).
+            // Wait briefly, then re-resolve the profile from live config.
           }
+
+          // Retry: wait for config.patch to land, re-resolve profile, retry probe.
+          for (let retry = 0; retry < 6; retry += 1) {
+            await new Promise((r) => setTimeout(r, 500));
+            const refreshed = resolveProfile(state().resolved, profile.name);
+            if (refreshed && refreshed.cdpUrl !== profile.cdpUrl) {
+              // cdpUrl changed — update profile in-place so all closures
+              // (isHttpReachable, isReachable, etc.) pick up the new URL.
+              profile.cdpUrl = refreshed.cdpUrl;
+              profile.cdpPort = refreshed.cdpPort;
+              profile.cdpHost = refreshed.cdpHost;
+              profile.cdpIsLoopback = refreshed.cdpIsLoopback;
+              try {
+                await tryDirectProbe(profile.cdpUrl);
+                return;
+              } catch {
+                // New URL not reachable yet — keep waiting.
+              }
+            }
+          }
+
+          throw new Error(
+            `Remote CDP for profile "${profile.name}" is not reachable at ${profile.cdpUrl}. ` +
+              `Direct CDP probe failed after waiting for config update.`,
+          );
         }
         throw new Error(
           `Browser attachOnly is enabled and profile "${profile.name}" is not running.`,
