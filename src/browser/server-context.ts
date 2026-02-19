@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { fetchJson, fetchOk } from "./cdp.helpers.js";
+import { fetchJson, fetchOk, getHeadersWithAuth } from "./cdp.helpers.js";
 import { appendCdpPath, createTargetViaCdp, normalizeCdpWsUrl } from "./cdp.js";
 import {
   isChromeCdpReady,
