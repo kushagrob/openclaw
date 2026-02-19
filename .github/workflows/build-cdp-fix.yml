@@ -31,6 +31,6 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
-          tags: ${{ env.REGISTRY }}/${{ github.repository }}:cdp-fix
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/openclaw-den:cdp-fix
           push: true
           provenance: false
