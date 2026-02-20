@@ -32,5 +32,7 @@ jobs:
           context: .
           platforms: linux/amd64
           tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/openclaw:cdp-fix
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
           provenance: false
           push: true
